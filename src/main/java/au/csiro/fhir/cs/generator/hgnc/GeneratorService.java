@@ -8,31 +8,24 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.hl7.fhir.r4.model.BooleanType;
 import org.hl7.fhir.r4.model.CodeSystem;
 import org.hl7.fhir.r4.model.CodeSystem.CodeSystemContentMode;
-import org.hl7.fhir.r4.model.CodeSystem.CodeSystemHierarchyMeaning;
 import org.hl7.fhir.r4.model.CodeSystem.ConceptDefinitionComponent;
-import org.hl7.fhir.r4.model.CodeSystem.FilterOperator;
 import org.hl7.fhir.r4.model.CodeSystem.PropertyComponent;
 import org.hl7.fhir.r4.model.CodeSystem.PropertyType;
-import org.hl7.fhir.r4.model.CodeType;
 import org.hl7.fhir.r4.model.Enumerations.PublicationStatus;
+import org.hl7.fhir.r4.model.StringType;
 import org.springframework.stereotype.Component;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.opencsv.CSVReader;
-import com.opencsv.exceptions.CsvException;
 
 /**
  * Main generator service for HGNC code systems.
@@ -40,41 +33,48 @@ import com.opencsv.exceptions.CsvException;
  * @author Alejandro Metke
  *
  */
+
 @Component
 public class GeneratorService {
   
   /**
-   * Generates the two code systems for HGNC: the gene ids code system and the gene groups code
-   * system.
    * 
+   * @param geneGroups
    * @param completeHgnc
-   * @param hgncGenesWithGroups
-   * @param hierachyClosure
-   * @return
-   * @throws IOException 
-   * @throws FileNotFoundException 
-   * @throws CsvException 
-   */
-  public List<CodeSystem> generateCodeSystems(File completeHgnc, File hgncGenesWithGroups, 
-      File hierachyClosure) throws FileNotFoundException, IOException, CsvException {
-    final List<CodeSystem> res = new ArrayList<>();
-    CodeSystem hgncGeneIdCs = generateGeneIdCodeSystem(completeHgnc);
-    res.add(hgncGeneIdCs);
-    res.add(generateGeneGroupCodeSystem(hgncGenesWithGroups, hierachyClosure, 
-        hgncGeneIdCs.getVersion()));
-    return res;
-  }
-  
-  /**
-   * Generates the FHIR code system <url>http://www.genenames.org/geneId</url>.
-   * 
-   * @param completeHgnc The complete HGNC dataset in JSON format.
    * @return
    * @throws IOException 
    * @throws FileNotFoundException 
    */
-  public CodeSystem generateGeneIdCodeSystem(File completeHgnc) 
+  public CodeSystem[] generateHgncCodeSystems(File geneGroups, File completeHgnc) 
       throws FileNotFoundException, IOException {
+    
+    final CodeSystem[] res = new CodeSystem[2];
+    
+    // Parse gene groups
+    Map<String, String> geneGroupIdNameMap = new HashMap<>();
+    Map<String, Set<String>> geneIdGroupMap = new HashMap<>();
+    try (FileReader reader = new FileReader(geneGroups)) {
+      JsonArray arr = JsonParser.parseReader(reader).getAsJsonArray();
+      for (JsonElement o : arr) {
+        JsonObject obj = o.getAsJsonObject();
+        String groupId = Integer.toString(obj.get("groupID").getAsInt());
+        String groupName = obj.get("groupName").getAsString();
+        String geneId = obj.get("hgncID").getAsString();
+        geneGroupIdNameMap.put(groupId, groupName);
+        
+        Set<String> groupIds = geneIdGroupMap.get(geneId);
+        if (groupIds == null) {
+          groupIds = new HashSet<>();
+          geneIdGroupMap.put(geneId, groupIds);
+        }
+        groupIds.add(groupId);
+      }
+    }
+      
+      
+    // Parse gene names
+    String version = "1970-01-01";
+    final Map<String, String> geneIdSymbolMap = new HashMap<>();
     try (FileReader reader = new FileReader(completeHgnc)) {
       JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
       
@@ -92,19 +92,6 @@ public class GeneratorService {
             + "response.docs\".");
       }
       
-      String version = "1970-01-01";
-      
-      CodeSystem res = new CodeSystem();
-      res.setUrl("http://www.genenames.org/geneId");
-      res.setName("HGNCGeneIDs");
-      res.setTitle("HGNC Gene IDs");
-      res.setStatus(PublicationStatus.ACTIVE);
-      res.setExperimental(false);
-      res.setPublisher("CSIRO");
-      res.setContent(CodeSystemContentMode.COMPLETE);
-      res.setDescription("Code system for gene IDs from HGNC.");
-      res.setCaseSensitive(true);
-      
       JsonArray docs = (JsonArray) je;
       for (JsonElement e : docs) {
         JsonObject doc = (JsonObject) e;
@@ -119,103 +106,67 @@ public class GeneratorService {
           // version precedes modified date so we need to update the version
           version = dateModified;
         }
-        res.addConcept().setCode(hgncId).setDisplay(symbol);
-      }
-      
-      res.setVersion(version);
-      return res;
-    }
-  }
-  
-  /**
-   * 
-   * @param hgncGenesWithGroups
-   * @param hierachyClosure
-   * @return
-   * @throws IOException 
-   * @throws FileNotFoundException 
-   * @throws CsvException 
-   */
-  public CodeSystem generateGeneGroupCodeSystem(File family, File hierachyClosure, 
-      String version) 
-      throws FileNotFoundException, IOException, CsvException {
-    
-    // Create map with direct parents
-    final Map<String, Set<String>> parents = new HashMap<>();
-    try (FileReader reader = new FileReader(hierachyClosure)) {
-      try (CSVReader csvReader = new CSVReader(reader)) {
-        List<String[]> list = csvReader.readAll();
-        
-        for (String[] row : list) {
-          String parent = row[0];
-          String child = row[1];
-          String distance = row[2];
-          
-          if ("1".equals(distance)) {
-            Set<String> s = parents.get(child);
-            if (s == null) {
-              s = new HashSet<>();
-              parents.put(child, s);
-            }
-            s.add(parent);
-          }
-        }
+        geneIdSymbolMap.put(hgncId, symbol);
         
       }
     }
     
-    try (FileReader reader = new FileReader(family)) {
-      CodeSystem res = new CodeSystem();
-      res.setUrl("http://www.genenames.org/genegroup");
-      res.setName("HGNCGeneGroups");
-      res.setTitle("HGNC Gene Groups");
-      res.setStatus(PublicationStatus.ACTIVE);
-      res.setExperimental(false);
-      res.setPublisher("CSIRO");
-      res.setContent(CodeSystemContentMode.COMPLETE);
-      res.setDescription("Code system for gene groups from HGNC.");
-      res.setCaseSensitive(true);
-      res.setHierarchyMeaning(CodeSystemHierarchyMeaning.ISA);
-      res.addFilter().setCode("root").addOperator(FilterOperator.EQUAL).setValue("True or false.");
-      PropertyComponent p = res.addProperty();
-      p.setCode("parent").setDescription("Parent codes.").setType(PropertyType.CODE);
-      PropertyComponent r = res.addProperty();
-      r.setCode("root").setDescription("Indicates if this concept is a root concept.")
-        .setType(PropertyType.BOOLEAN);
-      
-      
-      final Set<String> ids = new HashSet<>();
-      try (CSVReader csvReader = new CSVReader(reader)) {
-        List<String[]> list = csvReader.readAll();
-        
-        for (String[] row : list) {
-          String groupId = row[0];
-          String groupName = row[2];
-          
-          res.addConcept().setCode(groupId).setDisplay(groupName);
-          ids.add(groupId);
-        }
-      }
-      
-      for (ConceptDefinitionComponent cdc : res.getConcept()) {
-        String id = cdc.getCode();
-        Set<String> pars = parents.get(id);
-        if (pars != null && ! pars.isEmpty()) {
-          for (String parent : pars) {
-            if (!ids.contains(parent)) {
-              System.err.println("Parent " + parent + " does not exist");
-              continue;
-            }
-            cdc.addProperty().setCode("parent").setValue(new CodeType(parent));
-          }
-          cdc.addProperty().setCode("root").setValue(new BooleanType(false));
-        } else {
-          cdc.addProperty().setCode("root").setValue(new BooleanType(true));
-        }
-      }
-      
-      return res;
+    // Create gene groups code system
+    CodeSystem geneGroupsCs = new CodeSystem();
+    geneGroupsCs.setUrl("http://www.genenames.org/genegroup");
+    geneGroupsCs.setName("HGNCGeneGroups");
+    geneGroupsCs.setTitle("HGNC Gene Groups");
+    geneGroupsCs.setStatus(PublicationStatus.ACTIVE);
+    geneGroupsCs.setExperimental(false);
+    geneGroupsCs.setPublisher("CSIRO");
+    geneGroupsCs.setContent(CodeSystemContentMode.COMPLETE);
+    geneGroupsCs.setDescription("Code system for gene groups from HGNC.");
+    geneGroupsCs.setCaseSensitive(true);
+    geneGroupsCs.setVersion(version);
+    
+    for (String key : geneGroupIdNameMap.keySet()) {
+      geneGroupsCs.addConcept().setCode(key).setDisplay(geneGroupIdNameMap.get(key));
     }
+    
+    res[0] = geneGroupsCs;
+    
+    // Create gene ids code system
+    CodeSystem geneIdsCs = new CodeSystem();
+    geneIdsCs.setUrl("http://www.genenames.org/geneId");
+    geneIdsCs.setName("HGNCGeneIDs");
+    geneIdsCs.setTitle("HGNC Gene IDs");
+    geneIdsCs.setStatus(PublicationStatus.ACTIVE);
+    geneIdsCs.setExperimental(false);
+    geneIdsCs.setPublisher("CSIRO");
+    geneIdsCs.setContent(CodeSystemContentMode.COMPLETE);
+    geneIdsCs.setDescription("Code system for gene IDs from HGNC.");
+    geneIdsCs.setCaseSensitive(true);
+    geneIdsCs.setVersion(version);
+    PropertyComponent p = geneIdsCs.addProperty();
+    //p.setCode("groupId").setDescription("Gene group ids.").setType(PropertyType.CODING);
+    // Setting to string for now because coding type properties are not supported in Ontoserver
+    p.setCode("groupId").setDescription("Gene group ids.").setType(PropertyType.STRING);
+    
+    for (String key : geneIdSymbolMap.keySet()) {
+      ConceptDefinitionComponent cdc = geneIdsCs.addConcept().setCode(key)
+          .setDisplay(geneIdSymbolMap.get(key));
+      
+      // Add the gene groups as properties
+      if(geneIdGroupMap.containsKey(key)) {
+        for(String groupId : geneIdGroupMap.get(key)) {
+          cdc.addProperty().setCode("groupId").setValue(
+              //new Coding("http://www.genenames.org/genegroup", groupId, 
+              //    geneGroupIdNameMap.get(groupId))
+              new StringType(groupId)
+          );
+        }
+      }
+      
+    }
+    
+    res[1] = geneIdsCs;
+    
+    return res;
   }
 
 }

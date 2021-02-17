@@ -2,7 +2,6 @@ package au.csiro.fhir.cs.generator.hgnc;
 
 import java.io.File;
 import java.io.FileWriter;
-import java.util.List;
 
 import org.hl7.fhir.r4.model.CodeSystem;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,34 +24,31 @@ public class HgncFhirCodeSystemGeneratorApplication implements CommandLineRunner
     app.run(args);
   }
   
-  /**
-   * src/main/resources/hgnc_complete_set.json
-   * src/main/resources/download-all.json
-   * src/main/resources/hierarchy_closure.csv
-   */
   @Override
   public void run(String... args) throws Exception {
-    File completeHgnc = new File(args[0]);
-    File hgncGenesWithGroups = new File(args[1]);
-    File hierachyClosure = new File(args[2]);
-    File geneIdsCs = new File(args[3]);
-    File geneGroupsCs = new File(args[4]);
+    File geneGroups = new File(args[0]);
+    File completeHgnc = new File(args[1]);
+    File geneGroupsCodeSystemTargetFile = new File(args[2]);
+    File genesCodeSystemTargetFile = new File(args[3]);
     
     System.out.println("Generating HGNC code systems");
-    List<CodeSystem> cs = service.generateCodeSystems(completeHgnc, hgncGenesWithGroups, 
-        hierachyClosure);
+    CodeSystem[] cs = service.generateHgncCodeSystems(geneGroups, completeHgnc);
     
     FhirContext ctx = FhirContext.forR4();
     
-    System.out.println("Saving HGNC gene IDs code system to " + geneIdsCs.getAbsolutePath());
-    try (FileWriter fw = new FileWriter(geneIdsCs)) {
-      ctx.newJsonParser().encodeResourceToWriter(cs.get(0), fw);
+    System.out.println("Saving HGNC gene groups code system to " 
+        + geneGroupsCodeSystemTargetFile.getAbsolutePath());
+    try (FileWriter fw = new FileWriter(geneGroupsCodeSystemTargetFile)) {
+      ctx.newJsonParser().encodeResourceToWriter(cs[0], fw);
     }
     
-    System.out.println("Saving HGNC gene groups code system to " + geneGroupsCs.getAbsolutePath());
-    try (FileWriter fw = new FileWriter(geneGroupsCs)) {
-      ctx.newJsonParser().encodeResourceToWriter(cs.get(1), fw);
+    System.out.println("Saving HGNC gene IDs code system to " 
+        + genesCodeSystemTargetFile.getAbsolutePath());
+    try (FileWriter fw = new FileWriter(genesCodeSystemTargetFile)) {
+      ctx.newJsonParser().encodeResourceToWriter(cs[1], fw);
     }
+    
+    
     
   }
 
