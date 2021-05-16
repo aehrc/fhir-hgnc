@@ -1,5 +1,5 @@
-/**
- * Copyright CSIRO Australian e-Health Research Centre (http://aehrc.com). All rights reserved. Use 
+/*
+ * Copyright CSIRO Australian e-Health Research Centre (http://aehrc.com). All rights reserved. Use
  * is subject to license terms and conditions.
  */
 package au.csiro.fhir.cs.generator.hgnc;
@@ -38,12 +38,13 @@ import com.google.gson.JsonParser;
 public class GeneratorService {
   
   /**
-   * 
-   * @param geneGroups
-   * @param completeHgnc
-   * @return
-   * @throws IOException 
-   * @throws FileNotFoundException 
+   * Generates two code systems from the HGNC source files, one with the gene groups and one with the gene ids.
+   *
+   * @param geneGroups The gene groups file (download-all.json).
+   * @param completeHgnc The gene ids file (hgnc_complete_set.json).
+   * @return An array with both generated code systems.
+   * @throws IOException If an IO error happens.
+   * @throws FileNotFoundException If one of the specified files is not found.
    */
   public CodeSystem[] generateHgncCodeSystems(File geneGroups, File completeHgnc) 
       throws FileNotFoundException, IOException {
@@ -61,16 +62,11 @@ public class GeneratorService {
         String groupName = obj.get("groupName").getAsString();
         String geneId = obj.get("hgncID").getAsString();
         geneGroupIdNameMap.put(groupId, groupName);
-        
-        Set<String> groupIds = geneIdGroupMap.get(geneId);
-        if (groupIds == null) {
-          groupIds = new HashSet<>();
-          geneIdGroupMap.put(geneId, groupIds);
-        }
+
+        Set<String> groupIds = geneIdGroupMap.computeIfAbsent(geneId, k -> new HashSet<>());
         groupIds.add(groupId);
       }
     }
-      
       
     // Parse gene names
     String version = "1970-01-01";
@@ -161,7 +157,6 @@ public class GeneratorService {
           );
         }
       }
-      
     }
     
     res[1] = geneIdsCs;

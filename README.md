@@ -1,7 +1,28 @@
-# HGNC FHIR Code System Generator
+# HGNC to FHIR Transformer
 
-Inputs are:
+This Spring Boot CLI application transforms a collection of HGNC source files into FHIR code systems. It produces two FHIR code systems, one with the gene groups and another one with the gene ids.
 
-- Gene groups file (download-all.json) and gene ids file (hgnc_complete_set.json), downloaded from [this page](https://www.genenames.org/download/statistics-and-files/).
-- Gene groups code system target file.
-- Gene ids code system target file.
+## Building from source
+
+You will need Maven installed in your computer. You can build the jar file using Maven.
+
+```
+mvn package
+```
+
+## Running
+
+You need a JVM to run the application.
+
+```
+java -jar fhir-hgnc-0.1.0-SNAPSHOT.jar -igg [file] -igi [file] -ogg [file] -ogi [file]
+```
+
+All the parameters are mandatory and the following table shows their descriptions:
+
+| Parameter          | Type        | Description   |
+| :----------------- | :---------- |:------------- |
+| -igg               | string      | The gene groups input file, download-all.json, available from [this page](https://www.genenames.org/download/statistics-and-files/).|
+| -igi               | string      | The gene ids input file, hgnc_complete_set.json, available from [this page](https://www.genenames.org/download/statistics-and-files/).|
+| -ogg               | string      | Gene groups FHIR code system target file. |
+| -ogi               | string      | Gene ids FHIR code system target file. |

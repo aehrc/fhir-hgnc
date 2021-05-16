@@ -2,7 +2,9 @@ package au.csiro.fhir.cs.generator.hgnc;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.PrintWriter;
 
+import org.apache.commons.cli.*;
 import org.hl7.fhir.r4.model.CodeSystem;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.Banner;
@@ -11,6 +13,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import ca.uhn.fhir.context.FhirContext;
+
+import static java.lang.System.exit;
 
 @SpringBootApplication
 public class HgncFhirCodeSystemGeneratorApplication implements CommandLineRunner {
@@ -26,30 +30,100 @@ public class HgncFhirCodeSystemGeneratorApplication implements CommandLineRunner
   
   @Override
   public void run(String... args) throws Exception {
-    File geneGroups = new File(args[0]);
-    File completeHgnc = new File(args[1]);
-    File geneGroupsCodeSystemTargetFile = new File(args[2]);
-    File genesCodeSystemTargetFile = new File(args[3]);
-    
-    System.out.println("Generating HGNC code systems");
-    CodeSystem[] cs = service.generateHgncCodeSystems(geneGroups, completeHgnc);
-    
-    FhirContext ctx = FhirContext.forR4();
-    
-    System.out.println("Saving HGNC gene groups code system to " 
+    Options options = new Options();
+    options.addOption(
+      Option.builder("igg")
+        .required(true)
+        .hasArg(true)
+        .longOpt("input-gene-groups")
+        .desc("The input HGNC gene groups file.")
+        .build()
+    );
+    options.addOption(
+      Option.builder("igi")
+        .required(true)
+        .hasArg(true)
+        .longOpt("input-gene-ids")
+        .desc("The input HGNC gene ids file.")
+        .build()
+    );
+    options.addOption(
+      Option.builder("ogg")
+        .required(true)
+        .hasArg(true)
+        .longOpt("output-gene-groups")
+        .desc("The output HGNC gene groups FHIR code system file.")
+        .build()
+    );
+    options.addOption(
+      Option.builder("ogi")
+        .required(true)
+        .hasArg(true)
+        .longOpt("output-gene-ids")
+        .desc("The output HGNC gene ids FHIR code system file.")
+        .build()
+    );
+
+    CommandLineParser parser = new DefaultParser();
+    try {
+      File geneGroups = null;
+      File completeHgnc = null;
+      File geneGroupsCodeSystemTargetFile = null;
+      File genesCodeSystemTargetFile = null;
+
+      // parse the command line arguments
+      CommandLine line = parser.parse(options, args);
+      String val = line.getOptionValue("igg");
+      if (val != null) {
+        geneGroups = new File(val);
+      }
+
+      val = line.getOptionValue("igi");
+      if (val != null) {
+        completeHgnc = new File(val);
+      }
+
+      val = line.getOptionValue("ogg");
+      if (val != null) {
+        geneGroupsCodeSystemTargetFile = new File(val);
+      }
+
+      val = line.getOptionValue("ogi");
+      if (val != null) {
+        genesCodeSystemTargetFile = new File(val);
+      }
+
+      System.out.println("Generating HGNC code systems");
+      CodeSystem[] cs = service.generateHgncCodeSystems(geneGroups, completeHgnc);
+
+      FhirContext ctx = FhirContext.forR4();
+
+      System.out.println("Saving HGNC gene groups code system to "
         + geneGroupsCodeSystemTargetFile.getAbsolutePath());
-    try (FileWriter fw = new FileWriter(geneGroupsCodeSystemTargetFile)) {
-      ctx.newJsonParser().encodeResourceToWriter(cs[0], fw);
-    }
-    
-    System.out.println("Saving HGNC gene IDs code system to " 
+      try (FileWriter fw = new FileWriter(geneGroupsCodeSystemTargetFile)) {
+        ctx.newJsonParser().setPrettyPrint(true).encodeResourceToWriter(cs[0], fw);
+      }
+
+      System.out.println("Saving HGNC gene IDs code system to "
         + genesCodeSystemTargetFile.getAbsolutePath());
-    try (FileWriter fw = new FileWriter(genesCodeSystemTargetFile)) {
-      ctx.newJsonParser().encodeResourceToWriter(cs[1], fw);
+      try (FileWriter fw = new FileWriter(genesCodeSystemTargetFile)) {
+        ctx.newJsonParser().setPrettyPrint(true).encodeResourceToWriter(cs[1], fw);
+      }
+
+    } catch (ParseException exp) {
+      // oops, something went wrong
+      System.out.println(exp.getMessage());
+      printUsage(options);
     }
-    
-    
-    
+
+    exit(0);
+  }
+
+  private static void printUsage(Options options) {
+    HelpFormatter formatter = new HelpFormatter();
+    final PrintWriter writer = new PrintWriter(System.out);
+    formatter.printUsage(writer, 80, "FHIR HGNC", options);
+    writer.flush();
   }
 
 }
