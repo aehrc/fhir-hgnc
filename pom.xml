@@ -10,7 +10,7 @@
   </parent>
   <groupId>au.csiro</groupId>
   <artifactId>fhir-hgnc</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <name>HGNC FHIR Code System Generator</name>
   <description>Application to transform the HGNC source files into FHIR code systems.</description>
 
