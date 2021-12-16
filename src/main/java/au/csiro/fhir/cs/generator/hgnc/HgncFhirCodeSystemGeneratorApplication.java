@@ -33,7 +33,7 @@ public class HgncFhirCodeSystemGeneratorApplication implements CommandLineRunner
     Options options = new Options();
     options.addOption(
       Option.builder("igg")
-        .required(true)
+        .required(false)
         .hasArg(true)
         .longOpt("input-gene-groups")
         .desc("The input HGNC gene groups file.")
@@ -49,7 +49,7 @@ public class HgncFhirCodeSystemGeneratorApplication implements CommandLineRunner
     );
     options.addOption(
       Option.builder("ogg")
-        .required(true)
+        .required(false)
         .hasArg(true)
         .longOpt("output-gene-groups")
         .desc("The output HGNC gene groups FHIR code system file.")
@@ -76,9 +76,6 @@ public class HgncFhirCodeSystemGeneratorApplication implements CommandLineRunner
       String val = line.getOptionValue("igg");
       if (val != null) {
         geneGroups = new File(val);
-      } else  {
-        System.out.println("The -igg argument is required.");
-        System.exit(0);
       }
 
       val = line.getOptionValue("igi");
@@ -92,9 +89,6 @@ public class HgncFhirCodeSystemGeneratorApplication implements CommandLineRunner
       val = line.getOptionValue("ogg");
       if (val != null) {
         geneGroupsCodeSystemTargetFile = new File(val);
-      } else  {
-        System.out.println("The -ogg argument is required.");
-        System.exit(0);
       }
 
       val = line.getOptionValue("ogi");
@@ -106,20 +100,34 @@ public class HgncFhirCodeSystemGeneratorApplication implements CommandLineRunner
       }
 
       System.out.println("Generating HGNC code systems");
-      CodeSystem[] cs = service.generateHgncCodeSystems(geneGroups, completeHgnc);
-
       FhirContext ctx = FhirContext.forR4();
+      if (geneGroups == null) {
+        System.out.println("Gene groups file is not available");
+        CodeSystem cs = service.generateHgncCodeSystem(completeHgnc);
+        System.out.println("Saving HGNC gene IDs code system to "
+          + genesCodeSystemTargetFile.getAbsolutePath());
+        try (FileWriter fw = new FileWriter(genesCodeSystemTargetFile)) {
+          ctx.newJsonParser().setPrettyPrint(true).encodeResourceToWriter(cs, fw);
+        }
+      } else {
+        CodeSystem[] cs = service.generateHgncCodeSystems(geneGroups, completeHgnc);
 
-      System.out.println("Saving HGNC gene groups code system to "
-        + geneGroupsCodeSystemTargetFile.getAbsolutePath());
-      try (FileWriter fw = new FileWriter(geneGroupsCodeSystemTargetFile)) {
-        ctx.newJsonParser().setPrettyPrint(true).encodeResourceToWriter(cs[0], fw);
-      }
+        if (geneGroupsCodeSystemTargetFile == null) {
+          System.out.println("The -ogg argument is required.");
+          System.exit(0);
+        }
 
-      System.out.println("Saving HGNC gene IDs code system to "
-        + genesCodeSystemTargetFile.getAbsolutePath());
-      try (FileWriter fw = new FileWriter(genesCodeSystemTargetFile)) {
-        ctx.newJsonParser().setPrettyPrint(true).encodeResourceToWriter(cs[1], fw);
+        System.out.println("Saving HGNC gene groups code system to "
+          + geneGroupsCodeSystemTargetFile.getAbsolutePath());
+        try (FileWriter fw = new FileWriter(geneGroupsCodeSystemTargetFile)) {
+          ctx.newJsonParser().setPrettyPrint(true).encodeResourceToWriter(cs[0], fw);
+        }
+
+        System.out.println("Saving HGNC gene IDs code system to "
+          + genesCodeSystemTargetFile.getAbsolutePath());
+        try (FileWriter fw = new FileWriter(genesCodeSystemTargetFile)) {
+          ctx.newJsonParser().setPrettyPrint(true).encodeResourceToWriter(cs[1], fw);
+        }
       }
 
     } catch (ParseException exp) {

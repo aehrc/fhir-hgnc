@@ -20,9 +20,9 @@ java -jar fhir-hgnc-0.1.0-SNAPSHOT.jar -igg [file] -igi [file] -ogg [file] -ogi 
 
 All the parameters are mandatory and the following table shows their descriptions:
 
-| Parameter          | Type        | Description   |
-| :----------------- | :---------- |:------------- |
-| -igg               | string      | The gene groups input file, download-all.json, available from [this page](https://www.genenames.org/download/statistics-and-files/).|
-| -igi               | string      | The gene ids input file, hgnc_complete_set.json, available from [this page](https://www.genenames.org/download/statistics-and-files/).|
-| -ogg               | string      | Gene groups FHIR code system target file. |
-| -ogi               | string      | Gene ids FHIR code system target file. |
+| Parameter          | Type        | Mandatory      |Description   |
+| :----------------- | :---------- |:------------- |:------------- |
+| -igg               | string      | No            |  The gene groups input file, download-all.json, available from [this page](https://www.genenames.org/download/statistics-and-files/).|
+| -igi               | string      | Yes            | The gene ids input file, hgnc_complete_set.json, available from [this page](https://www.genenames.org/download/statistics-and-files/).|
+| -ogg               | string      | No            | Gene groups FHIR code system target file. |
+| -ogi               | string      | Yes            | Gene ids FHIR code system target file. |

@@ -8,16 +8,14 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import org.hl7.fhir.r4.model.CodeSystem;
 import org.hl7.fhir.r4.model.CodeSystem.CodeSystemContentMode;
 import org.hl7.fhir.r4.model.CodeSystem.ConceptDefinitionComponent;
 import org.hl7.fhir.r4.model.CodeSystem.PropertyComponent;
 import org.hl7.fhir.r4.model.CodeSystem.PropertyType;
+import org.hl7.fhir.r4.model.Coding;
 import org.hl7.fhir.r4.model.Enumerations.PublicationStatus;
 import org.hl7.fhir.r4.model.StringType;
 import org.springframework.stereotype.Component;
@@ -69,43 +67,10 @@ public class GeneratorService {
     }
       
     // Parse gene names
-    String version = "1970-01-01";
-    final Map<String, String> geneIdSymbolMap = new HashMap<>();
-    try (FileReader reader = new FileReader(completeHgnc)) {
-      JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
-      
-      // Need to get the "response" attribute
-      JsonElement je = jsonObject.get("response");
-      if (je == null) {
-        throw new RuntimeException("Malformed complete HGNC data set. Expected an attribute "
-            + "\"response\".");
-      }
-      
-      JsonObject resp = (JsonObject) je;
-      je = resp.get("docs");
-      if (je == null) {
-        throw new RuntimeException("Malformed complete HGNC data set. Expected an attribute \""
-            + "response.docs\".");
-      }
-      
-      JsonArray docs = (JsonArray) je;
-      for (JsonElement e : docs) {
-        JsonObject doc = (JsonObject) e;
-        String hgncId = doc.get("hgnc_id").getAsString();
-        String symbol = doc.get("symbol").getAsString();
-        String dateModified = "1970-01-01";
-        JsonElement mod = doc.get("date_modified");
-        if (mod != null) {
-          dateModified = mod.getAsString();
-        }
-        if (version.compareTo(dateModified) < 0) {
-          // version precedes modified date so we need to update the version
-          version = dateModified;
-        }
-        geneIdSymbolMap.put(hgncId, symbol);
-        
-      }
-    }
+    GeneIdsAndVersion geneIdsAndVersion = getGeneIdsAndVersion(completeHgnc);
+    String version = geneIdsAndVersion.getVersion();
+    Map<String, String> geneIdSymbolMap = geneIdsAndVersion.getGeneIdSymbolMap();
+    Map<String, Set<String>> geneIdPreviousSymbolMap = geneIdsAndVersion.getGeneIdPreviousSymbolMap();
     
     // Create gene groups code system
     CodeSystem geneGroupsCs = new CodeSystem();
@@ -125,7 +90,22 @@ public class GeneratorService {
     }
     
     res[0] = geneGroupsCs;
+    res[1] = createGeneIdsCodeSystem(version, geneIdSymbolMap, geneIdPreviousSymbolMap, geneIdGroupMap);
     
+    return res;
+  }
+
+  public CodeSystem generateHgncCodeSystem(File completeHgnc) throws IOException {
+    GeneIdsAndVersion geneIdsAndVersion = getGeneIdsAndVersion(completeHgnc);
+    String version = geneIdsAndVersion.getVersion();
+    Map<String, String> geneIdSymbolMap = geneIdsAndVersion.getGeneIdSymbolMap();
+    Map<String, Set<String>> geneIdPreviousSymbolMap = geneIdsAndVersion.getGeneIdPreviousSymbolMap();
+    return createGeneIdsCodeSystem(version, geneIdSymbolMap, geneIdPreviousSymbolMap, null);
+  }
+
+  private CodeSystem createGeneIdsCodeSystem(String version, Map<String, String> geneIdSymbolMap,
+                                             Map<String, Set<String>> geneIdPreviousSymbolMap,
+                                             Map<String, Set<String>> geneIdGroupMap) {
     // Create gene ids code system
     CodeSystem geneIdsCs = new CodeSystem();
     geneIdsCs.setUrl("http://www.genenames.org/geneId");
@@ -142,26 +122,81 @@ public class GeneratorService {
     //p.setCode("groupId").setDescription("Gene group ids.").setType(PropertyType.CODING);
     // Setting to string for now because coding type properties are not supported in Ontoserver
     p.setCode("groupId").setDescription("Gene group ids.").setType(PropertyType.STRING);
-    
+
     for (String key : geneIdSymbolMap.keySet()) {
       ConceptDefinitionComponent cdc = geneIdsCs.addConcept().setCode(key)
-          .setDisplay(geneIdSymbolMap.get(key));
-      
+        .setDisplay(geneIdSymbolMap.get(key));
+
+      for (String previousSymbol : geneIdPreviousSymbolMap.get(key)) {
+        CodeSystem.ConceptDefinitionDesignationComponent designation = cdc.addDesignation();
+        designation.setValue(previousSymbol);
+        designation.setUse(new Coding("http://snomed.info/sct", "900000000000013009", "Synonym"));
+      }
+
       // Add the gene groups as properties
-      if(geneIdGroupMap.containsKey(key)) {
-        for(String groupId : geneIdGroupMap.get(key)) {
-          cdc.addProperty().setCode("groupId").setValue(
-              //new Coding("http://www.genenames.org/genegroup", groupId, 
+      if (geneIdGroupMap != null) {
+        if (geneIdGroupMap.containsKey(key)) {
+          for (String groupId : geneIdGroupMap.get(key)) {
+            cdc.addProperty().setCode("groupId").setValue(
+              //new Coding("http://www.genenames.org/genegroup", groupId,
               //    geneGroupIdNameMap.get(groupId))
               new StringType(groupId)
-          );
+            );
+          }
         }
       }
     }
-    
-    res[1] = geneIdsCs;
-    
-    return res;
+    return geneIdsCs;
+  }
+
+  private GeneIdsAndVersion getGeneIdsAndVersion(File completeHgnc) throws IOException {
+    String version = "1970-01-01";
+    Map<String, String> geneIdSymbolMap = new HashMap<>();
+    Map<String, Set<String>> geneIdPreviousSymbolMap = new HashMap<>();
+    try (FileReader reader = new FileReader(completeHgnc)) {
+      JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
+
+      // Need to get the "response" attribute
+      JsonElement je = jsonObject.get("response");
+      if (je == null) {
+        throw new RuntimeException("Malformed complete HGNC data set. Expected an attribute "
+          + "\"response\".");
+      }
+
+      JsonObject resp = (JsonObject) je;
+      je = resp.get("docs");
+      if (je == null) {
+        throw new RuntimeException("Malformed complete HGNC data set. Expected an attribute \""
+          + "response.docs\".");
+      }
+
+      JsonArray docs = (JsonArray) je;
+      for (JsonElement e : docs) {
+        JsonObject doc = (JsonObject) e;
+        String hgncId = doc.get("hgnc_id").getAsString();
+        String symbol = doc.get("symbol").getAsString();
+        String dateModified = "1970-01-01";
+        JsonElement mod = doc.get("date_modified");
+        if (mod != null) {
+          dateModified = mod.getAsString();
+        }
+        if (version.compareTo(dateModified) < 0) {
+          // version precedes modified date so we need to update the version
+          version = dateModified;
+        }
+        geneIdSymbolMap.put(hgncId, symbol);
+
+        Set<String> previousSymbols = new HashSet<>();
+        JsonElement previousSymbolElement = doc.get("prev_symbol");
+        if (previousSymbolElement != null) {
+          for (JsonElement previousSymbol : previousSymbolElement.getAsJsonArray()) {
+            previousSymbols.add(previousSymbol.getAsString());
+          }
+        }
+        geneIdPreviousSymbolMap.put(hgncId, previousSymbols);
+      }
+    }
+    return new GeneIdsAndVersion(geneIdSymbolMap, geneIdPreviousSymbolMap, version);
   }
 
 }
