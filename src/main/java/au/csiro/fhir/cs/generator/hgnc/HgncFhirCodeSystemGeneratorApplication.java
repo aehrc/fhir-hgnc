@@ -76,21 +76,33 @@ public class HgncFhirCodeSystemGeneratorApplication implements CommandLineRunner
       String val = line.getOptionValue("igg");
       if (val != null) {
         geneGroups = new File(val);
+      } else  {
+        System.out.println("The -igg argument is required.");
+        System.exit(0);
       }
 
       val = line.getOptionValue("igi");
       if (val != null) {
         completeHgnc = new File(val);
+      } else  {
+        System.out.println("The -igi argument is required.");
+        System.exit(0);
       }
 
       val = line.getOptionValue("ogg");
       if (val != null) {
         geneGroupsCodeSystemTargetFile = new File(val);
+      } else  {
+        System.out.println("The -ogg argument is required.");
+        System.exit(0);
       }
 
       val = line.getOptionValue("ogi");
       if (val != null) {
         genesCodeSystemTargetFile = new File(val);
+      } else  {
+        System.out.println("The -ogi argument is required.");
+        System.exit(0);
       }
 
       System.out.println("Generating HGNC code systems");
